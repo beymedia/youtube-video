@@ -1,13 +1,41 @@
-from flask import Flask, render_template, request, send_file
-from pytubefix import YouTube
-from pytubefix.exceptions import PytubeFixError
 import os
+import re
+import glob
 import uuid
+import shutil
+from flask import Flask, render_template, request, send_file
+
+import yt_dlp
+
 
 app = Flask(__name__)
 
-DOWNLOAD_DIR = "downloads"
+DOWNLOAD_DIR = os.path.join(os.getcwd(), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+
+def clean_old_files():
+    """
+    Render-in müvəqqəti diskini doldurmamaq üçün
+    köhnə faylları təmizləyir.
+    """
+    for file in glob.glob(os.path.join(DOWNLOAD_DIR, "*")):
+        try:
+            if os.path.isfile(file):
+                os.remove(file)
+        except Exception:
+            pass
+
+
+def valid_youtube_url(url):
+    patterns = [
+        r"^https?://(www\.)?youtube\.com/watch\?v=",
+        r"^https?://youtu\.be/",
+        r"^https?://(www\.)?youtube\.com/shorts/",
+        r"^https?://(www\.)?youtube\.com/embed/"
+    ]
+
+    return any(re.match(pattern, url) for pattern in patterns)
 
 
 @app.route("/")
@@ -17,6 +45,7 @@ def index():
 
 @app.route("/download", methods=["POST"])
 def download():
+
     url = request.form.get("url", "").strip()
 
     if not url:
@@ -25,47 +54,139 @@ def download():
             error="YouTube linkini daxil edin."
         )
 
-    try:
-        yt = YouTube(url)
-
-        # Ən yüksək keyfiyyətli progressive stream
-        stream = (
-            yt.streams
-            .filter(progressive=True, file_extension="mp4")
-            .order_by("resolution")
-            .desc()
-            .first()
+    if not valid_youtube_url(url):
+        return render_template(
+            "index.html",
+            error="Düzgün YouTube linki daxil edin."
         )
 
-        if not stream:
-            return render_template(
-                "index.html",
-                error="Uyğun MP4 formatı tapılmadı."
+    clean_old_files()
+
+    job_id = uuid.uuid4().hex
+
+    output_template = os.path.join(
+        DOWNLOAD_DIR,
+        f"{job_id}.%(ext)s"
+    )
+
+    ydl_opts = {
+        # Video + audio, mümkün olan ən yaxşı MP4
+        "format": (
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+            "best[ext=mp4]/best"
+        ),
+
+        "outtmpl": output_template,
+
+        # FFmpeg ilə birləşdirmə
+        "merge_output_format": "mp4",
+
+        # Metadata
+        "quiet": True,
+        "no_warnings": True,
+
+        # Playlist yox, yalnız verilmiş video
+        "noplaylist": True,
+
+        # Fayl adını təhlükəsiz saxla
+        "restrictfilenames": True,
+
+        # YouTube extractor üçün uyğun client seçimi
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["web", "android"]
+            }
+        }
+    }
+
+    try:
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+
+            info = ydl.extract_info(
+                url,
+                download=True
             )
 
-        filename = f"{uuid.uuid4().hex}.mp4"
+            title = info.get(
+                "title",
+                "youtube-video"
+            )
 
-        filepath = stream.download(
-            output_path=DOWNLOAD_DIR,
-            filename=filename
+        files = glob.glob(
+            os.path.join(
+                DOWNLOAD_DIR,
+                f"{job_id}.*"
+            )
         )
 
-        return send_file(
+        if not files:
+            return render_template(
+                "index.html",
+                error="Video faylı yaradılmadı."
+            )
+
+        filepath = files[0]
+
+        safe_title = re.sub(
+            r'[\\/*?:"<>|]',
+            "",
+            title
+        ).strip()
+
+        if not safe_title:
+            safe_title = "youtube-video"
+
+        download_name = safe_title[:100] + ".mp4"
+
+        response = send_file(
             filepath,
             as_attachment=True,
-            download_name=f"{yt.title[:80]}.mp4",
+            download_name=download_name,
             mimetype="video/mp4"
         )
 
-    except Exception as e:
+        return response
+
+    except yt_dlp.utils.DownloadError as e:
+
+        error_text = str(e)
+
         return render_template(
             "index.html",
-            error=f"Xəta baş verdi: {str(e)}"
+            error=(
+                "YouTube videonu əldə etmək mümkün olmadı. "
+                "Video ictimai və endirməyə icazəli olmalıdır."
+            )
+        )
+
+    except Exception as e:
+
+        print("ERROR:", repr(e))
+
+        return render_template(
+            "index.html",
+            error="Server tərəfində xəta baş verdi."
         )
 
 
+@app.route("/health")
+def health():
+    return {
+        "status": "ok",
+        "service": "youtube-video"
+    }
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
+
     app.run(
         host="0.0.0.0",
         port=port,
