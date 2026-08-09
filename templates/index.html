@@ -1,61 +1,156 @@
 <!DOCTYPE html>
 <html lang="az">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>YouTube Video Downloader</title>
+
+    <meta
+        name="description"
+        content="YouTube videolarını MP4 formatında endirmək üçün sadə və sürətli downloader."
+    >
 
     <link
         rel="stylesheet"
         href="{{ url_for('static', filename='style.css') }}"
     >
+
 </head>
 
 <body>
 
-<div class="container">
+<div class="page">
 
     <div class="card">
 
-        <div class="logo">
+        <div class="youtube-icon">
             ▶
         </div>
 
-        <h1>YouTube Video Downloader</h1>
+        <h1>
+            YouTube Video Downloader
+        </h1>
 
-        <p class="subtitle">
+        <p class="description">
             Video linkini daxil edin və MP4 formatında endirin.
         </p>
 
+
         {% if error %}
-            <div class="error">
-                {{ error }}
-            </div>
+
+        <div class="error">
+            {{ error }}
+        </div>
+
         {% endif %}
 
-        <form action="/download" method="POST">
 
-            <input
-                type="url"
-                name="url"
-                placeholder="https://www.youtube.com/watch?v=..."
-                required
+        <form
+            action="/download"
+            method="POST"
+            id="downloadForm"
+        >
+
+            <div class="input-box">
+
+                <input
+                    type="url"
+                    name="url"
+                    id="url"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    autocomplete="off"
+                    required
+                >
+
+            </div>
+
+
+            <button
+                type="submit"
+                id="downloadButton"
             >
 
-            <button type="submit">
-                Videonu endir
+                <span id="buttonText">
+                    Videonu endir
+                </span>
+
+                <span
+                    id="loading"
+                    style="display:none"
+                >
+                    Hazırlanır...
+                </span>
+
             </button>
 
         </form>
 
-        <div class="info">
-            Yalnız endirməyə icazəniz olan məzmunu istifadə edin.
+
+        <div class="features">
+
+            <div>
+                <strong>MP4</strong>
+                <span>Video formatı</span>
+            </div>
+
+            <div>
+                <strong>HD</strong>
+                <span>Mümkün olan keyfiyyət</span>
+            </div>
+
+            <div>
+                <strong>Fast</strong>
+                <span>Sürətli server</span>
+            </div>
+
         </div>
+
+
+        <p class="notice">
+            Yalnız endirməyə icazəniz olan videolardan istifadə edin.
+        </p>
 
     </div>
 
 </div>
 
+
+<script>
+
+const form = document.getElementById("downloadForm");
+
+const button = document.getElementById(
+    "downloadButton"
+);
+
+const buttonText = document.getElementById(
+    "buttonText"
+);
+
+const loading = document.getElementById(
+    "loading"
+);
+
+
+form.addEventListener("submit", function () {
+
+    button.disabled = true;
+
+    buttonText.style.display = "none";
+
+    loading.style.display = "inline";
+
+});
+
+</script>
+
 </body>
+
 </html>
